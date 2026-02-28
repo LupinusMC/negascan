@@ -1,84 +1,1459 @@
-# シナリオ・デバフ因子集計ツール
+<!DOCTYPE html>
+<html lang="ja">
 
-ウマ娘プリティーダービーの因子周回で手に入れた「デバフ因子」と「シナリオ因子」を記録・集計し、継承親の組み合わせを管理するためのツールです。  
-殿堂入りしたウマ娘（親）ごとに、親本人・祖父母の持つ因子の星の数を記録しておくことで、どの親の組み合わせが最も多くの因子を継承できるかを比較・検討することができます。
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シナリオ・デバフ因子集計</title>
+    <meta name="description" content="ウマ娘のシナリオ・デバフ因子を集計・管理するツール">
+    <style>
+        body {
+            font-family: 'Meiryo', sans-serif;
+            background-color: #f4f5f7;
+            padding: 20px;
+            color: #333;
+        }
 
----
+        h1 {
+            font-size: 24px;
+            border-bottom: 2px solid #555;
+            padding-bottom: 5px;
+        }
 
-## 主な機能
+        /* コントロールパネル */
+        .control-panel {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
 
-### 親管理タブ
+        .btn {
+            padding: 8px 16px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
 
-「親管理」タブでは、殿堂入りしたウマ娘の因子情報を登録・管理します。
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
 
-#### 親の新規登録
-1. **キャラ名・トレーナー名**を入力します。
-2. **登録日**を入力します。数字を6桁（例: 260228）入力すると、自動的に「26/02/28」の形式にフォーマットされ、次の入力欄にカーソルが移動します。
-3. **ダート・マイル**（赤因子）の星の数を入力します。0〜3の数字を入力すると、自動的に次のマスにカーソルが移動します（爆速入力）。値がない場合は0を入力するか、空欄のまま次へ進んでください。
-4. **各因子の星の数**を同様に入力していきます。表示されているすべての因子について、親・祖1・祖2の3行分を入力します。
-5. 入力が完了したら「親を登録」ボタンを押して保存します。
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
 
-#### 祖の読込
-祖父母の因子を手入力する代わりに、既に登録済みの親データを「祖1」「祖2」として読み込むことができます。プルダウンから該当する親を選択すると、そのデータの親1行目の因子が自動的にコピーされます。
+        .btn-info {
+            background: #2196F3;
+            color: white;
+        }
 
-#### 編集・削除
-親一覧に表示されている各データの「編集」ボタンを押すと、そのデータが上部の入力欄に読み込まれ、内容を修正して「上書き保存」することができます。「削除」ボタンで登録を削除できますが、編成で使用中の親は先に編成を削除する必要があります。
+        /* フィルター */
+        .filter-group {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #ccc;
+        }
 
-### 編成管理タブ
+        .filter-label {
+            margin-right: 15px;
+            font-size: 14px;
+            cursor: pointer;
+        }
 
-「編成管理」タブでは、登録済みの親を2人選んで「編成」として保存し、6人分（親1の親・祖1・祖2 ＋ 親2の親・祖1・祖2）の因子合計を確認することができます。
+        /* エクセル風テーブル */
+        .table-container {
+            overflow-x: auto;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
 
-1. **親1・親2**をプルダウンから選択します。
-2. 任意で**編成名**を入力します（未入力の場合は「名無し編成」になります）。
-3. 「編成を保存」ボタンで保存します。
+        table {
+            border-collapse: collapse;
+            white-space: nowrap;
+            width: auto;
+        }
 
-保存した編成は一覧に表示され、「詳細を表示」ボタンで6人分の因子の内訳を展開して確認できます。編成名は後から「名前変更」ボタンで変更することも可能です。
+        th,
+        td {
+            border: 1px solid #aaa;
+            padding: 2px 4px;
+            text-align: center;
+            font-size: 12px;
+        }
 
-### 表示フィルター
+        th {
+            background-color: #f0f0f0;
+            font-weight: normal;
+        }
 
-画面上部の「表示フィルター」から、因子のグループ（駆け引き、けん制、焦り、ためらい、点火、シナリオ他、真髄、加護）ごとに表示・非表示を切り替えることができます。
+        /* キャラ名・トレーナー名の列幅固定 */
+        .col-char {
+            min-width: 80px;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
-- チェックを外したグループの因子は、テーブルの列ごと非表示になります。
-- 「星数計」「因子種類数」の値もフィルターに連動し、**表示中の因子のみ**を対象に計算されます。
-- 並び替えのスコアもフィルターに連動します。例えば「ためらい」だけにチェックを入れて並び替えれば、ためらい因子だけで最も優秀な親を探すことができます。
+        .col-trainer {
+            min-width: 70px;
+            max-width: 70px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
-### 並び替え機能
+        /* 因子ヘッダーの縦書き風＆色分け */
+        .factor-header {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            height: 120px;
+            min-width: 25px;
+            vertical-align: bottom;
+            padding-bottom: 5px;
+        }
 
-「親一覧」および「編成一覧」の横にある「並び替え」プルダウンから、以下の基準でデータを並び替えることができます。
+        .bg-tenka {
+            background-color: #b3e5fc;
+        }
 
-- **登録順**: データが登録された順番（デフォルト）で表示します。
-- **星数計（多い順）**: 表示中のフィルターに基づく星の合計数が多い順に並び替えます。
-- **因子種類数（多い順）**: 表示中のフィルターに基づく因子の種類数（ユニーク数）が多い順に並び替えます。
+        /* 水色 */
+        .bg-shinzui {
+            background-color: #c8e6c9;
+        }
 
-### データの保存と管理
+        /* 緑 */
+        .bg-kago {
+            background-color: #ffe0b2;
+        }
 
-- **自動保存**: 登録・編集・削除の操作は、すべてブラウザのローカルストレージに自動的に保存されます。ページを閉じてもデータは保持されます。
-- **JSON保存**: 「💾 JSON保存」ボタンを押すと、すべてのデータ（親データ＋編成データ）をJSONファイルとしてダウンロードできます。バックアップや端末間の移行にご利用ください。
-- **JSON読込**: 「📂 JSON読込」ボタンを押すと、保存したJSONファイルからデータを復元できます。
+        /* オレンジ */
+        .bg-others {
+            background-color: #e1bee7;
+        }
 
----
+        /* 紫 */
+        .bg-debuff {
+            background-color: #fff9c4;
+        }
 
-## 注意事項
+        /* 黄色 */
+        /* +++ 追加: 赤因子用CSS +++ */
+        .bg-red {
+            background-color: #ffcdd2;
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            height: 120px;
+            min-width: 25px;
+            vertical-align: bottom;
+            padding-bottom: 5px;
+        }
 
-- データはブラウザのローカルストレージに保存されます。**ブラウザのデータ消去（キャッシュクリア等）を行うと、因子データも一緒に消えてしまいます**。定期的に「JSON保存」でバックアップを取ることを強くおすすめします。
-- 「全データ削除」ボタンを押すと、親データと編成データがすべて削除されます。この操作は元に戻せませんのでご注意ください。
+        /* --- 変更箇所 END --- */
 
-## 対応している因子
+        /* 入力セル */
+        .cell-input {
+            width: 22px;
+            text-align: center;
+            border: none;
+            background: transparent;
+            font-size: 12px;
+        }
 
-| カテゴリ | 因子 |
-|---------|------|
-| デバフ | けん制、焦り、ためらい（逃げ/先行/差し/追込の各4種） |
-| 駆け引き | 逃げ/先行/差し/追込 駆け引き |
-| 適性（赤因子） | ダート、マイル |
-| 点火 | 速、体、力、根、賢 |
-| 真髄 | 速、体、力、根、賢、心 |
-| 加護 | 陽、海、地 |
-| シナリオ他 | 綺羅星、夢の途中、前だけ見据えて、想いを背負って、バーニングソウル、いつまでも健やかに、夢の再生方法、時代を変える者、あるがままに、本気で休んで、アメリカン |
+        .cell-input:focus {
+            outline: 2px solid #2196F3;
+            background: #e3f2fd;
+        }
 
-## 動作環境
+        /* 星数計・因子種類数ヘッダーの縦書き */
+        .stat-header {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            height: 120px;
+            min-width: 25px;
+            vertical-align: bottom;
+            padding-bottom: 5px;
+            background-color: #f0f0f0;
+        }
 
-本ツールは**PC（パソコン）での利用を推奨**しています。スマートフォンからも閲覧・操作は可能ですが、テーブルの横幅が広いため、PCの方が快適にご利用いただけます。
+        .has-factor {
+            background-color: #ffcdd2;
+            font-weight: bold;
+            color: #d32f2f;
+        }
 
-## お問い合わせ
+        /* ピンク色 */
 
-ご要望・バグ報告等がありましたら、X（旧Twitter）アカウント [@brick29rs](https://x.com/brick29rs) までお願いします。
+        /* 行の背景 */
+        .row-parent {
+            background-color: #fafafa;
+        }
+
+        .row-gp {
+            background-color: #ffffff;
+        }
+
+        .row-total {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+
+        /* フォーム系 */
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 4px;
+        }
+
+        /* +++ 追加: タブ用CSS +++ */
+        .tab-buttons {
+            display: flex;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: #e0e0e0;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+        }
+
+        .tab-btn.active {
+            background: #fff;
+            border-top: 3px solid #4CAF50;
+        }
+
+        .tab-content {
+            display: none;
+            background: #fff;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 0 8px 8px 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* --- 変更箇所 END --- */
+
+        /* ソートコントロール */
+        .sort-control {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 15px;
+            font-size: 13px;
+        }
+
+        .sort-control select {
+            padding: 3px 6px;
+            margin-left: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        /* ヘルプパネル */
+        .help-panel {
+            display: none;
+            background: #fffde7;
+            border: 1px solid #fdd835;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-top: 10px;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .help-panel.active {
+            display: block;
+        }
+
+        .help-panel h4 {
+            margin: 10px 0 5px;
+            color: #e65100;
+        }
+
+        .help-panel h4:first-child {
+            margin-top: 0;
+        }
+
+        .help-panel ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .help-panel .help-warn {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+
+
+
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            body {
+                padding: 8px;
+            }
+
+            h1 {
+                font-size: 18px;
+            }
+
+            h3 {
+                font-size: 15px;
+            }
+
+            .control-panel {
+                padding: 10px;
+            }
+
+            .btn {
+                padding: 6px 10px;
+                font-size: 12px;
+                margin-right: 5px;
+                margin-bottom: 5px;
+            }
+
+            .form-group {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .form-group label {
+                font-size: 12px;
+                flex-basis: 100%;
+            }
+
+            .form-group input,
+            .form-group select {
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .tab-btn {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            th,
+            td {
+                padding: 1px 2px;
+                font-size: 10px;
+            }
+
+            .cell-input {
+                width: 18px;
+                font-size: 10px;
+            }
+
+            .factor-header,
+            .stat-header,
+            .bg-red {
+                writing-mode: horizontal-tb;
+                text-orientation: mixed;
+                height: auto;
+                min-width: 18px;
+                font-size: 10px;
+            }
+
+            .filter-label {
+                font-size: 11px;
+                margin-right: 8px;
+            }
+
+            .sort-control {
+                display: flex;
+                margin-left: 0;
+                margin-top: 5px;
+                font-size: 11px;
+            }
+
+            .sort-control select {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>シナリオ・デバフ因子集計</h1>
+    <div class="control-panel">
+        <div>
+            <button class="btn btn-info" onclick="exportJSON()">💾 JSON保存</button>
+            <input type="file" id="importFile" style="display:none" onchange="importJSON(event)">
+            <button class="btn btn-info" onclick="document.getElementById('importFile').click()">📂 JSON読込</button>
+            <button class="btn btn-danger" onclick="clearAllData()">🗑 全データ削除</button>
+            <button class="btn" style="background:#ff9800;color:white;" onclick="toggleHelp()">❓ 使い方</button>
+        </div>
+
+        <div id="helpPanel" class="help-panel">
+            <h4>親管理タブ</h4>
+            <ul>
+                <li><strong>親の新規登録</strong>：キャラ名・トレーナー名を入力し、登録日は数字6桁（例:
+                    260228）を入力すると自動的に「26/02/28」の形式にフォーマットされます。続いて、ダート・マイル（赤因子）と各因子の星の数（0〜3）を入力します。数字を入力すると自動で次のマスにカーソルが移動します。すべて入力したら「親を登録」ボタンで保存します。
+                </li>
+                <li><strong>祖の読込</strong>：「祖1を読込」「祖2を読込」のプルダウンから登録済みの親を選択すると、その親のデータが祖1・祖2の行に自動コピーされます。</li>
+                <li><strong>編集・削除</strong>：親一覧の「編集」ボタンを押すと入力欄にデータが読み込まれ、修正して上書き保存できます。「削除」ボタンでデータを削除できますが、編成で使用中の親は先に編成を削除してください。
+                </li>
+            </ul>
+            <h4>編成管理タブ</h4>
+            <ul>
+                <li>登録済みの親を2人選んで「編成」として保存します。6人分（親1の親・祖1・祖2 ＋ 親2の親・祖1・祖2）の因子合計を一覧で確認できます。「詳細を表示」ボタンで内訳も確認可能です。</li>
+            </ul>
+            <h4>表示フィルターと並び替え</h4>
+            <ul>
+                <li>画面上部のチェックボックスで、因子グループごとに表示・非表示を切り替えられます。「星数計」「因子種類数」はフィルターに連動し、表示中の因子のみが計算対象になります。</li>
+                <li>並び替えもフィルターに連動します。例えば「ためらい」だけにチェックを入れて並び替えると、ためらい因子だけで最も優秀な親を探すことができます。</li>
+            </ul>
+            <h4>データの保存について</h4>
+            <ul>
+                <li>データはブラウザのローカルストレージに自動保存されます。</li>
+                <li class="help-warn">ブラウザのデータ消去（キャッシュクリア等）を行うと因子データも消えます。定期的に「JSON保存」でバックアップを取ることをおすすめします。</li>
+            </ul>
+            <p style="margin-top:12px; font-size:12px; color:#666;">
+                ※本ツールはPC（パソコン）での利用を推奨しています。スマートフォンからも操作は可能ですが、テーブルの横幅が広いためPCの方が快適です。</p>
+            <p style="margin-top:8px; font-size:12px; color:#666;">ご要望・バグ報告等がありましたら、Xアカウント <a
+                    href="https://x.com/brick29rs" target="_blank">@brick29rs</a> までお願いします。</p>
+        </div>
+
+        <div class="filter-group" id="filterContainer">
+            <strong>表示フィルター：</strong>
+        </div>
+    </div>
+
+    <div class="tab-buttons">
+        <button class="tab-btn active" onclick="switchTab('parentTab', this)">親管理</button>
+        <button class="tab-btn" onclick="switchTab('formationTab', this)">編成管理</button>
+    </div>
+    <div id="parentTab" class="tab-content active">
+        <div class="control-panel" id="registrationArea" style="box-shadow:none; border: 1px solid #eee;">
+            <h3>親を新規登録</h3>
+            <div class="form-group">
+                <label>キャラ名: <input type="text" id="inputCharName"></label>
+                <label>トレーナー名: <input type="text" id="inputTrainerName"></label>
+                <label>登録日: <input type="text" id="inputRegDate" placeholder="yy/mm/dd" maxlength="8"
+                        oninput="handleRegDateInput(event)"></label>
+                <button class="btn btn-primary" id="btnSaveParent" style="margin-left: 15px;"
+                    onclick="saveCurrentSet()">➕ 親を登録</button>
+            </div>
+            <div class="form-group">
+                <label>祖1を読込: <select id="loadGp1" onchange="loadGpData(1)">
+                        <option value="">-- 新規手入力 --</option>
+                    </select></label>
+                <label>祖2を読込: <select id="loadGp2" onchange="loadGpData(2)">
+                        <option value="">-- 新規手入力 --</option>
+                    </select></label>
+            </div>
+
+            <div class="table-container">
+                <table id="inputTable">
+                    <thead>
+                        <tr id="inputTableHeader"></tr>
+                    </thead>
+                    <tbody id="inputTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="savedDataArea">
+            <h3 style="display:inline-block;">親一覧</h3>
+            <span class="sort-control">
+                <label>並び替え:
+                    <select id="parentSortSelect" onchange="updateSavedSetsDisplay()">
+                        <option value="default">登録順</option>
+                        <option value="stars_desc">星数計（多い順）</option>
+                        <option value="types_desc">因子種類数（多い順）</option>
+                    </select>
+                </label>
+            </span>
+            <div id="savedTablesContainer"></div>
+        </div>
+    </div>
+    <div id="formationTab" class="tab-content">
+        <h3>編成を新規登録</h3>
+        <div class="form-group">
+            <label>親1を選択: <select id="formParent1"></select></label>
+            <label>親2を選択: <select id="formParent2"></select></label>
+            <label>編成名: <input type="text" id="formName" placeholder=""></label>
+            <button class="btn btn-primary" onclick="saveFormation()">➕ 編成を保存</button>
+        </div>
+
+        <h3 style="display:inline-block;">編成一覧</h3>
+        <span class="sort-control">
+            <label>並び替え:
+                <select id="formationSortSelect" onchange="updateFormationDisplay()">
+                    <option value="default">登録順</option>
+                    <option value="stars_desc">星数計（多い順）</option>
+                    <option value="types_desc">因子種類数（多い順）</option>
+                </select>
+            </label>
+        </span>
+        <div id="formationsContainer"></div>
+    </div>
+    <script>
+        // --- 1. データ定義 ---
+        // 因子の種類とグループを定義
+        // +++ 変更: 配列の並び順を変更（駆け引き→逃げ→先行→差し→追込→シナリオ） +++
+        const factors = [
+            // 駆け引き
+            { id: 'kake_nige', name: '逃げ駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+            { id: 'kake_sen', name: '先行駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+            { id: 'kake_sashi', name: '差し駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+            { id: 'kake_oi', name: '追込駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+            // 逃げデバフ
+            { id: 'ken_nige', name: '逃げけん制', group: 'けん制', class: 'bg-debuff' },
+            { id: 'ase_nige', name: '逃げ焦り', group: '焦り', class: 'bg-debuff' },
+            { id: 'tame_nige', name: '逃げためらい', group: 'ためらい', class: 'bg-debuff' },
+            // 先行デバフ
+            { id: 'ken_sen', name: '先行けん制', group: 'けん制', class: 'bg-debuff' },
+            { id: 'ase_sen', name: '先行焦り', group: '焦り', class: 'bg-debuff' },
+            { id: 'tame_sen', name: '先行ためらい', group: 'ためらい', class: 'bg-debuff' },
+            // 差しデバフ
+            { id: 'ken_sashi', name: '差しけん制', group: 'けん制', class: 'bg-debuff' },
+            { id: 'ase_sashi', name: '差し焦り', group: '焦り', class: 'bg-debuff' },
+            { id: 'tame_sashi', name: '差しためらい', group: 'ためらい', class: 'bg-debuff' },
+            // 追込デバフ
+            { id: 'ken_oi', name: '追込けん制', group: 'けん制', class: 'bg-debuff' },
+            { id: 'ase_oi', name: '追込焦り', group: '焦り', class: 'bg-debuff' },
+            { id: 'tame_oi', name: '追込ためらい', group: 'ためらい', class: 'bg-debuff' },
+            // シナリオ因子
+            { id: 'tenka_soku', name: '点火・速', group: '点火', class: 'bg-tenka' },
+            { id: 'tenka_tai', name: '点火・体', group: '点火', class: 'bg-tenka' },
+            { id: 'tenka_ryoku', name: '点火・力', group: '点火', class: 'bg-tenka' },
+            { id: 'tenka_kon', name: '点火・根', group: '点火', class: 'bg-tenka' },
+            { id: 'tenka_ken', name: '点火・賢', group: '点火', class: 'bg-tenka' },
+            { id: 'kira', name: '綺羅星', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'yume', name: '夢の途中', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'shin_soku', name: '真髄・速', group: '真髄', class: 'bg-shinzui' },
+            { id: 'shin_tai', name: '真髄・体', group: '真髄', class: 'bg-shinzui' },
+            { id: 'shin_ryoku', name: '真髄・力', group: '真髄', class: 'bg-shinzui' },
+            { id: 'shin_kon', name: '真髄・根', group: '真髄', class: 'bg-shinzui' },
+            { id: 'shin_ken', name: '真髄・賢', group: '真髄', class: 'bg-shinzui' },
+            { id: 'shin_shin', name: '真髄・心', group: '真髄', class: 'bg-shinzui' },
+            { id: 'mae', name: '前だけ見据えて', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'kago_yo', name: '加護・陽', group: '加護', class: 'bg-kago' },
+            { id: 'kago_umi', name: '加護・海', group: '加護', class: 'bg-kago' },
+            { id: 'kago_chi', name: '加護・地', group: '加護', class: 'bg-kago' },
+            { id: 'omoi', name: '想いを背負って', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'burning', name: 'バーニングソウル', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'sukoyaka', name: 'いつまでも健やかに', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'saisei', name: '夢の再生方法', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'jidai', name: '時代を変える者', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'aruga', name: 'あるがままに', group: 'シナリオ他', class: 'bg-others' },
+            { id: 'yasunde', name: '本気で休んで', group: 'シナリオ他', class: 'bg-others' },
+            // +++ 追加: アメリカン因子 +++
+            { id: 'american', name: 'アメリカン', group: 'シナリオ他', class: 'bg-others' }
+            // --- 追加箇所 END ---
+        ];
+        // --- 変更箇所 END ---
+
+        let savedData = JSON.parse(localStorage.getItem('umaSets')) || [];
+        // +++ 追加: 過去データ互換性＆編成データ定義 +++
+        savedData.forEach(d => {
+            if (!d.regDate) d.regDate = '';
+            ['親1', '祖1', '祖2'].forEach(r => {
+                if (!d.factors[r]) d.factors[r] = {};
+                if (d.factors[r].dirt === undefined) d.factors[r].dirt = 0;
+                if (d.factors[r].mile === undefined) d.factors[r].mile = 0;
+            });
+        });
+        let savedFormations = JSON.parse(localStorage.getItem('umaFormations')) || [];
+        // --- 変更箇所 END ---
+
+        let activeFilters = new Set(); // 表示するグループ名のセット
+
+        // +++ 追加: 編集用のインデックス保持変数 +++
+        let editingIndex = null;
+        // --- 変更箇所 END ---
+
+        // +++ 追加: タブ切り替え関数 +++
+        function switchTab(tabId, btn) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            btn.classList.add('active');
+            if (tabId === 'formationTab') updateFormationDisplay();
+        }
+        // --- 変更箇所 END ---
+
+        // +++ 追加: ヘルプパネルのトグル +++
+        function toggleHelp() {
+            document.getElementById('helpPanel').classList.toggle('active');
+        }
+        // --- 変更箇所 END ---
+
+        // --- 2. 初期化とUI構築 ---
+        function init() {
+            setupFilters();
+            buildInputTable();
+            updateSavedSetsDisplay();
+            updateDropdowns();
+            // +++ 追加: 編成タブ初期化 +++
+            updateFormationDisplay();
+            // --- 変更箇所 END ---
+        }
+
+        function setupFilters() {
+            const groups = [...new Set(factors.map(f => f.group))];
+            const container = document.getElementById('filterContainer');
+            container.innerHTML = '<strong>表示フィルター：</strong>';
+
+            groups.forEach(group => {
+                // 駆け引きはデフォルトでチェック外す
+                const isHidden = factors.find(f => f.group === group).defaultHidden;
+                if (!isHidden) activeFilters.add(group);
+
+                const label = document.createElement('label');
+                label.className = 'filter-label';
+                label.innerHTML = `<input type="checkbox" value="${group}" ${!isHidden ? 'checked' : ''} onchange="toggleFilter(this)"> ${group}`;
+                container.appendChild(label);
+            });
+        }
+
+        function toggleFilter(checkbox) {
+            if (checkbox.checked) {
+                activeFilters.add(checkbox.value);
+            } else {
+                activeFilters.delete(checkbox.value);
+            }
+            // +++ 変更: フィルター変更時に入力値を保持する +++
+            const savedInputData = {};
+            const currentInputs = document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red');
+            currentInputs.forEach(input => {
+                const role = input.getAttribute('data-role');
+                const factorId = input.getAttribute('data-factor');
+                const val = input.value;
+                if (val !== '') {
+                    if (!savedInputData[role]) savedInputData[role] = {};
+                    savedInputData[role][factorId] = val;
+                }
+            });
+            // --- 変更箇所 END ---
+
+            buildInputTable();
+
+            // +++ 変更: 入力値を復元する +++
+            const newInputs = document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red');
+            newInputs.forEach(input => {
+                const role = input.getAttribute('data-role');
+                const factorId = input.getAttribute('data-factor');
+                if (savedInputData[role] && savedInputData[role][factorId]) {
+                    input.value = savedInputData[role][factorId];
+                    if (factorId !== 'dirt' && factorId !== 'mile') {
+                        input.classList.toggle('has-factor', parseInt(input.value) > 0);
+                    }
+                }
+            });
+            recalculateInputTable();
+            // --- 変更箇所 END ---
+
+            updateSavedSetsDisplay();
+            updateFormationDisplay();
+        }
+
+        // --- 3. テーブル生成ロジック ---
+        // +++ 変更: 引数isInputを追加し、列の順番・表示非表示を制御 +++
+        function buildTableHeader(isInput = true) {
+            let html = ``;
+            if (!isInput) {
+                html += `<th class="col-char">キャラ</th><th class="col-trainer">トレーナー</th>`;
+            }
+            html += `<th>関係</th>`;
+            // ダート、マイルを関係の右側に移動
+            html += `<th class="bg-red">ダート</th><th class="bg-red">マイル</th>`;
+
+            factors.forEach(f => {
+                if (activeFilters.has(f.group)) {
+                    html += `<th class="factor-header ${f.class}">${f.name}</th>`;
+                }
+            });
+
+            html += `<th class="stat-header">星数計</th><th class="stat-header">因子種類数</th>`;
+            return html;
+        }
+        // --- 変更箇所 END ---
+
+        function buildRow(roleName, rowIdPrefix, isInput = true, rowData = null, hideNames = false) {
+            let html = ``;
+            // +++ 変更: 6人編成でキャラ名統合セルを隠す処理、登録日の表示追加、入力時はキャラ/トレのtdを作らない +++
+            if (!isInput) {
+                if (!hideNames && roleName === '親1') {
+                    let charDisp = `${rowData.charName}<br><span style="font-size:10px;">${rowData.regDate}</span>`;
+                    html += `<td class="col-char" rowspan="3">${charDisp}</td>`;
+                    html += `<td class="col-trainer" rowspan="3">${rowData.trainerName}</td>`;
+                } else if (hideNames && (roleName === '親1' || roleName === '親2')) {
+                    let charDisp = `${rowData.charName}<br><span style="font-size:10px;">${rowData.regDate}</span>`;
+                    html += `<td class="col-char" rowspan="3">${charDisp}</td>`;
+                    html += `<td class="col-trainer" rowspan="3">${rowData.trainerName}</td>`;
+                }
+            }
+            // --- 変更箇所 END ---
+            // +++ 変更: 編成タブ以外は親1を親と表記 +++
+            let displayRole = roleName === '親1' && !hideNames ? '親' : roleName;
+            html += `<td>${displayRole}</td>`;
+            // --- 変更箇所 END ---
+
+            // +++ 変更: フィルター除外機能による動的計算のための変数準備 +++
+            let dynamicStars = 0;
+            let dynamicTypes = 0;
+            // --- 変更箇所 END ---
+
+            // +++ 変更: ダート・マイルの入力と表示を因子の前に移動 +++
+            let dirtVal = ''; let mileVal = '';
+            if (!isInput && rowData && rowData.factors) {
+                let realRole = roleName;
+                if (roleName === '親2') realRole = '親1';
+                if (roleName === '祖3') realRole = '祖1';
+                if (roleName === '祖4') realRole = '祖2';
+                dirtVal = rowData.factors[realRole].dirt || 0;
+                mileVal = rowData.factors[realRole].mile || 0;
+            }
+            if (isInput) {
+                html += `<td><input type="text" maxlength="1" class="cell-input input-red" data-role="${roleName}" data-factor="dirt" oninput="handleInput(event)" onkeydown="handleKeydown(event)"></td>`;
+                html += `<td><input type="text" maxlength="1" class="cell-input input-red" data-role="${roleName}" data-factor="mile" oninput="handleInput(event)" onkeydown="handleKeydown(event)"></td>`;
+            } else {
+                html += `<td>${dirtVal == 0 ? '' : dirtVal}</td>`;
+                html += `<td>${mileVal == 0 ? '' : mileVal}</td>`;
+            }
+            // --- 変更箇所 END ---
+
+            factors.forEach(f => {
+                if (activeFilters.has(f.group)) {
+                    let val = '';
+                    let cellClass = '';
+                    if (!isInput && rowData && rowData.factors) {
+                        // +++ 変更: 6人編成用にroleNameマッピング +++
+                        let realRole = roleName;
+                        if (roleName === '親2') realRole = '親1';
+                        if (roleName === '祖3') realRole = '祖1';
+                        if (roleName === '祖4') realRole = '祖2';
+                        val = rowData.factors[realRole][f.id] || 0;
+                        // --- 変更箇所 END ---
+                        if (val > 0) {
+                            cellClass = 'has-factor';
+                            // +++ 追加: 動的計算 +++
+                            dynamicStars += val;
+                            dynamicTypes++;
+                            // --- 変更箇所 END ---
+                        }
+                    }
+
+                    if (isInput) {
+                        html += `<td><input type="text" maxlength="1" class="cell-input input-factor" data-role="${roleName}" data-factor="${f.id}" oninput="handleInput(event)" onkeydown="handleKeydown(event)"></td>`;
+                    } else {
+                        html += `<td class="${cellClass}">${val == 0 ? '' : val}</td>`;
+                    }
+                }
+            });
+
+            // +++ 変更: 保存済みデータもフィルターに応じて動的に合計を出す +++
+            html += `<td class="calc-stars ${isInput ? rowIdPrefix + '-stars' : ''}">${isInput ? '0' : dynamicStars}</td>`;
+            html += `<td class="calc-types ${isInput ? rowIdPrefix + '-types' : ''}">${isInput ? '0' : dynamicTypes}</td>`;
+            // --- 変更箇所 END ---
+            return html;
+        }
+
+        function buildTotalRow(isInput = true, rowData = null, rowData2 = null) {
+            let html = '';
+            // +++ 変更: 入力時はcolspan調整 +++
+            if (isInput) {
+                html += `<td style="text-align:right;">計</td>`;
+            } else {
+                html += `<td colspan="3" style="text-align:right;">計</td>`;
+            }
+            // --- 変更箇所 END ---
+
+            // +++ 追加: フィルター動的計算・6人編成合計用変数 +++
+            let dynamicAllStars = 0;
+            let dynamicAllTypes = 0;
+            let totalDirt = 0;
+            let totalMile = 0;
+            // --- 変更箇所 END ---
+
+            // +++ 変更: ダート・マイルの合計計算と出力を因子の前に移動 +++
+            if (!isInput && rowData) {
+                ['親1', '祖1', '祖2'].forEach(r => {
+                    totalDirt += (rowData.factors[r].dirt || 0);
+                    totalMile += (rowData.factors[r].mile || 0);
+                });
+                if (rowData2) {
+                    ['親1', '祖1', '祖2'].forEach(r => {
+                        totalDirt += (rowData2.factors[r].dirt || 0);
+                        totalMile += (rowData2.factors[r].mile || 0);
+                    });
+                }
+            }
+            if (isInput) {
+                html += `<td class="total-dirt">0</td><td class="total-mile">0</td>`;
+            } else {
+                html += `<td>${totalDirt == 0 ? '' : totalDirt}</td><td>${totalMile == 0 ? '' : totalMile}</td>`;
+            }
+            // --- 変更箇所 END ---
+
+            factors.forEach(f => {
+                if (activeFilters.has(f.group)) {
+                    let val = 0;
+                    // +++ 変更: フィルター除外時の動的計算＆6人編成対応 +++
+                    if (!isInput && rowData) {
+                        ['親1', '祖1', '祖2'].forEach(r => {
+                            let v = rowData.factors[r][f.id] || 0;
+                            val += v;
+                            dynamicAllStars += v;
+                        });
+                        if (rowData2) { // 6人編成の場合
+                            ['親1', '祖1', '祖2'].forEach(r => {
+                                let v = rowData2.factors[r][f.id] || 0;
+                                val += v;
+                                dynamicAllStars += v;
+                            });
+                        }
+                        if (val > 0) dynamicAllTypes++;
+                    }
+                    // --- 変更箇所 END ---
+                    html += `<td class="calc-col-total ${isInput ? 'col-total-' + f.id : ''} ${val > 0 && !isInput ? 'has-factor' : ''}">${isInput ? '0' : (val == 0 ? '' : val)}</td>`;
+                }
+            });
+
+            // +++ 変更: 計算結果を動的に反映 +++
+            html += `<td class="${isInput ? 'total-all-stars' : ''}">${isInput ? '0' : dynamicAllStars}</td>`;
+            html += `<td class="${isInput ? 'total-all-types' : ''}">${isInput ? '0' : dynamicAllTypes}</td>`;
+            // --- 変更箇所 END ---
+            return html;
+        }
+
+        function buildInputTable() {
+            // +++ 変更: isInputフラグを渡す +++
+            document.getElementById('inputTableHeader').innerHTML = buildTableHeader(true);
+            const tbody = document.getElementById('inputTableBody');
+            tbody.innerHTML = `
+            <tr class="row-parent">${buildRow('親1', 'input_p', true)}</tr>
+            <tr class="row-gp">${buildRow('祖1', 'input_g1', true)}</tr>
+            <tr class="row-gp">${buildRow('祖2', 'input_g2', true)}</tr>
+            <tr class="row-total">${buildTotalRow(true)}</tr>
+        `;
+            // --- 変更箇所 END ---
+        }
+
+        // --- 4. 入力補助（爆速入力）とリアルタイム計算 ---
+        // +++ 追加: 登録日の爆速入力関数 +++
+        function handleRegDateInput(e) {
+            let val = e.target.value.replace(/\D/g, ''); // 数字以外を除外
+            if (val.length >= 6) {
+                val = val.substring(0, 6);
+                e.target.value = val.substring(0, 2) + '/' + val.substring(2, 4) + '/' + val.substring(4, 6);
+                // 最初のダート入力欄へフォーカス
+                const firstDirt = document.querySelector('.input-red[data-role="親1"][data-factor="dirt"]');
+                if (firstDirt) {
+                    firstDirt.focus();
+                    firstDirt.select();
+                }
+            }
+        }
+        // --- 変更箇所 END ---
+
+        function handleInput(e) {
+            const val = e.target.value;
+            // 0-3以外は消す
+            if (!/^[0-3]$/.test(val)) {
+                e.target.value = '';
+            } else {
+                // 色付け
+                e.target.classList.toggle('has-factor', val > 0);
+
+                // 次の入力マスへ自動移動
+                // +++ 変更: 赤因子も爆速入力対象に含める +++
+                const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red'));
+                // --- 変更箇所 END ---
+                // ※今回はDOM順がダート・マイル→因子の順になったため、Array.from()で取得される順番も一致する。
+                const idx = inputs.indexOf(e.target);
+                if (idx > -1 && idx < inputs.length - 1) {
+                    inputs[idx + 1].focus();
+                    inputs[idx + 1].select();
+                }
+            }
+            recalculateInputTable();
+        }
+
+        function handleKeydown(e) {
+            // Backspaceで空欄なら一つ前に戻る
+            if (e.key === 'Backspace' && e.target.value === '') {
+                // +++ 変更: 赤因子も対象 +++
+                const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red'));
+                // --- 変更箇所 END ---
+                const idx = inputs.indexOf(e.target);
+                if (idx > 0) {
+                    inputs[idx - 1].focus();
+                    inputs[idx - 1].select();
+                    e.preventDefault();
+                }
+            }
+        }
+
+        function recalculateInputTable() {
+            // +++ 変更: 赤因子も取得対象 +++
+            const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red'));
+            // --- 変更箇所 END ---
+            let data = { '親1': {}, '祖1': {}, '祖2': {} };
+
+            inputs.forEach(input => {
+                const role = input.getAttribute('data-role');
+                const factorId = input.getAttribute('data-factor');
+                data[role][factorId] = parseInt(input.value) || 0;
+                // 表示の更新
+                if (factorId !== 'dirt' && factorId !== 'mile') {
+                    input.classList.toggle('has-factor', input.value > 0);
+                }
+            });
+
+            let allStars = 0;
+            let allTypes = 0;
+            let colTotals = {};
+            // +++ 追加: ダートマイル合計 +++
+            let totalDirt = 0;
+            let totalMile = 0;
+            // --- 変更箇所 END ---
+
+            ['親1', '祖1', '祖2'].forEach((role, idx) => {
+                let rowStars = 0;
+                let rowTypes = 0;
+                factors.forEach(f => {
+                    // +++ 変更: 非表示フィルターを計算から除外 +++
+                    if (activeFilters.has(f.group)) {
+                        const val = data[role][f.id] || 0;
+                        rowStars += val;
+                        if (val > 0) rowTypes++;
+                        colTotals[f.id] = (colTotals[f.id] || 0) + val;
+                    }
+                    // --- 変更箇所 END ---
+                });
+
+                // +++ 追加: ダートマイルの加算 +++
+                totalDirt += data[role].dirt || 0;
+                totalMile += data[role].mile || 0;
+                // --- 変更箇所 END ---
+
+                const prefix = ['input_p', 'input_g1', 'input_g2'][idx];
+                document.querySelector(`.${prefix}-stars`).textContent = rowStars;
+                document.querySelector(`.${prefix}-types`).textContent = rowTypes;
+                allStars += rowStars;
+                allTypes += rowTypes;
+            });
+
+            factors.forEach(f => {
+                if (activeFilters.has(f.group)) {
+                    const colCell = document.querySelector(`.col-total-${f.id}`);
+                    colCell.textContent = colTotals[f.id] > 0 ? colTotals[f.id] : '';
+                    colCell.classList.toggle('has-factor', colTotals[f.id] > 0);
+                }
+            });
+
+            document.querySelector('.total-all-stars').textContent = allStars;
+            document.querySelector('.total-all-types').textContent = allTypes;
+            // +++ 追加: ダートマイル合計表示 +++
+            document.querySelector('.total-dirt').textContent = totalDirt;
+            document.querySelector('.total-mile').textContent = totalMile;
+            // --- 変更箇所 END ---
+        }
+
+        // --- 5. データの保存・読込・表示 ---
+        function saveCurrentSet() {
+            // +++ 変更: 取得元を上部の入力欄に統一 +++
+            const charName = document.getElementById('inputCharName').value || '名無し';
+            const trainerName = document.getElementById('inputTrainerName').value || '名無し';
+            const regDate = document.getElementById('inputRegDate').value || '';
+            // --- 変更箇所 END ---
+
+            let newSet = {
+                id: 'id_' + Date.now(), // 上書きの場合は後で元のIDをセット
+                charName: charName,
+                trainerName: trainerName,
+                regDate: regDate,
+                factors: { '親1': {}, '祖1': {}, '祖2': {} },
+                totals: {
+                    '親1': { stars: 0, types: 0 },
+                    '祖1': { stars: 0, types: 0 },
+                    '祖2': { stars: 0, types: 0 },
+                    cols: {},
+                    allStars: 0,
+                    allTypes: 0
+                }
+            };
+
+            // +++ 変更: 赤因子も保存 +++
+            const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red'));
+            // --- 変更箇所 END ---
+
+            factors.forEach(f => {
+                ['親1', '祖1', '祖2'].forEach(role => {
+                    const el = document.querySelector(`.input-factor[data-role="${role}"][data-factor="${f.id}"]`);
+                    const val = el ? (parseInt(el.value) || 0) : 0;
+                    newSet.factors[role][f.id] = val;
+
+                    newSet.totals[role].stars += val;
+                    if (val > 0) newSet.totals[role].types++;
+                    newSet.totals.cols[f.id] = (newSet.totals.cols[f.id] || 0) + val;
+                    newSet.totals.allStars += val;
+                });
+            });
+
+            // +++ 追加: ダート・マイルの保存 +++
+            ['親1', '祖1', '祖2'].forEach(role => {
+                const elDirt = document.querySelector(`.input-red[data-role="${role}"][data-factor="dirt"]`);
+                const elMile = document.querySelector(`.input-red[data-role="${role}"][data-factor="mile"]`);
+                newSet.factors[role].dirt = elDirt ? (parseInt(elDirt.value) || 0) : 0;
+                newSet.factors[role].mile = elMile ? (parseInt(elMile.value) || 0) : 0;
+            });
+            // --- 変更箇所 END ---
+
+            ['親1', '祖1', '祖2'].forEach(role => {
+                let t = 0;
+                factors.forEach(f => { if (newSet.factors[role][f.id] > 0) t++; });
+                newSet.totals[role].types = t;
+            });
+
+            // +++ 追加: 上書きか新規かの分岐処理 +++
+            if (editingIndex !== null) {
+                newSet.id = savedData[editingIndex].id; // 既存のIDを引き継ぐ
+                savedData[editingIndex] = newSet;
+                editingIndex = null;
+                document.getElementById('btnSaveParent').textContent = '➕ 親を登録';
+                alert('上書き保存したで！');
+            } else {
+                savedData.push(newSet);
+                alert('保存したで！');
+            }
+            // --- 変更箇所 END ---
+
+            saveToLocal();
+            updateSavedSetsDisplay();
+            updateDropdowns();
+            // +++ 追加: 編集で内容が変わった場合、編成タブの表示も最新化 +++
+            updateFormationDisplay();
+            // --- 変更箇所 END ---
+
+            // 入力クリア
+            inputs.forEach(input => { input.value = ''; input.classList.remove('has-factor'); });
+            // +++ 追加: 上部の入力欄もクリア +++
+            document.getElementById('inputCharName').value = '';
+            document.getElementById('inputTrainerName').value = '';
+            document.getElementById('inputRegDate').value = '';
+            // --- 変更箇所 END ---
+            recalculateInputTable();
+        }
+
+        // +++ 追加: 編集ボタンの処理 +++
+        function editSet(index) {
+            editingIndex = index;
+            const data = savedData[index];
+
+            // 上部の入力欄にセット
+            document.getElementById('inputCharName').value = data.charName;
+            document.getElementById('inputTrainerName').value = data.trainerName;
+            document.getElementById('inputRegDate').value = data.regDate;
+
+            // 表に因子データをロード
+            const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor, #inputTableBody .input-red'));
+            inputs.forEach(input => {
+                const role = input.getAttribute('data-role');
+                const factorId = input.getAttribute('data-factor');
+                const val = data.factors[role][factorId] || 0;
+                input.value = val > 0 ? val : '';
+                if (factorId !== 'dirt' && factorId !== 'mile') {
+                    input.classList.toggle('has-factor', val > 0);
+                }
+            });
+
+            recalculateInputTable();
+            // ボタンの表示変更
+            document.getElementById('btnSaveParent').textContent = '💾 上書き保存';
+            // 画面上部へスクロール
+            window.scrollTo(0, 0);
+        }
+        // --- 変更箇所 END ---
+
+        // +++ 追加: ソート用スコア計算関数 +++
+        function calcDataScore(data) {
+            let stars = 0;
+            let typesSet = new Set();
+            ['親1', '祖1', '祖2'].forEach(r => {
+                factors.forEach(f => {
+                    if (activeFilters.has(f.group)) {
+                        const val = data.factors[r][f.id] || 0;
+                        stars += val;
+                        if (val > 0) typesSet.add(f.id);
+                    }
+                });
+            });
+            return { stars, types: typesSet.size };
+        }
+        // --- 変更箇所 END ---
+
+        function updateSavedSetsDisplay() {
+            const container = document.getElementById('savedTablesContainer');
+            container.innerHTML = '';
+
+            // +++ 追加: ソート処理 +++
+            const sortKey = document.getElementById('parentSortSelect') ? document.getElementById('parentSortSelect').value : 'default';
+            let sortedIndices = savedData.map((d, i) => i);
+            if (sortKey !== 'default') {
+                sortedIndices.sort((a, b) => {
+                    const sa = calcDataScore(savedData[a]);
+                    const sb = calcDataScore(savedData[b]);
+                    if (sortKey === 'stars_desc') return sb.stars - sa.stars;
+                    if (sortKey === 'stars_asc') return sa.stars - sb.stars;
+                    if (sortKey === 'types_desc') return sb.types - sa.types;
+                    if (sortKey === 'types_asc') return sa.types - sb.types;
+                    return 0;
+                });
+            }
+            // --- 変更箇所 END ---
+
+            sortedIndices.forEach(index => {
+                const data = savedData[index];
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-container';
+                wrapper.style.marginBottom = '20px';
+                wrapper.style.border = '2px solid #ccc';
+
+                let html = `
+                <div style="padding: 5px; background: #e0e0e0; display: flex; justify-content: space-between;">
+                    <strong>${data.charName} (Tr: ${data.trainerName})</strong>
+                    <div>
+                        <button class="btn btn-info" style="padding: 2px 8px; margin-right: 5px;" onclick="editSet(${index})">編集</button>
+                        <button class="btn btn-danger" style="padding: 2px 8px;" onclick="deleteSet(${index})">削除</button>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr>${buildTableHeader(false)}</tr></thead>
+                    <tbody>
+                        <tr class="row-parent">${buildRow('親1', '', false, data)}</tr>
+                        <tr class="row-gp">${buildRow('祖1', '', false, data)}</tr>
+                        <tr class="row-gp">${buildRow('祖2', '', false, data)}</tr>
+                        <tr class="row-total">${buildTotalRow(false, data)}</tr>
+                    </tbody>
+                </table>
+            `;
+                wrapper.innerHTML = html;
+                container.appendChild(wrapper);
+            });
+        }
+
+        function updateDropdowns() {
+            const d1 = document.getElementById('loadGp1');
+            const d2 = document.getElementById('loadGp2');
+            // +++ 追加: 編成用プルダウン +++
+            const f1 = document.getElementById('formParent1');
+            const f2 = document.getElementById('formParent2');
+            // --- 変更箇所 END ---
+
+            d1.innerHTML = '<option value="">-- 新規手入力 --</option>';
+            d2.innerHTML = '<option value="">-- 新規手入力 --</option>';
+            // +++ 追加: 編成用プルダウン初期化 +++
+            f1.innerHTML = '<option value="">-- 選択 --</option>';
+            f2.innerHTML = '<option value="">-- 選択 --</option>';
+            // --- 変更箇所 END ---
+
+            savedData.forEach((data, index) => {
+                const option = `<option value="${index}">${data.charName} (Tr: ${data.trainerName})</option>`;
+                d1.innerHTML += option;
+                d2.innerHTML += option;
+                // +++ 追加: 編成用オプション追加 +++
+                f1.innerHTML += option;
+                f2.innerHTML += option;
+                // --- 変更箇所 END ---
+            });
+        }
+
+        // すでに登録してある「親1」のデータを「祖」として読み込む
+        function loadGpData(gpNum) {
+            const select = document.getElementById(`loadGp${gpNum}`);
+            const idx = select.value;
+            const roleStr = `祖${gpNum}`;
+
+            // +++ 変更: 赤因子も対象 +++
+            const inputs = Array.from(document.querySelectorAll(`.input-factor[data-role="${roleStr}"], .input-red[data-role="${roleStr}"]`));
+            // --- 変更箇所 END ---
+
+            if (idx === "") {
+                // クリア
+                inputs.forEach(input => { input.value = ''; input.classList.remove('has-factor'); });
+            } else {
+                // 読み込み（登録データの「親1」の因子をコピー）
+                const targetData = savedData[idx].factors['親1'];
+                inputs.forEach(input => {
+                    const factorId = input.getAttribute('data-factor');
+                    const val = targetData[factorId] || 0;
+                    input.value = val > 0 ? val : '';
+                    if (factorId !== 'dirt' && factorId !== 'mile') {
+                        input.classList.toggle('has-factor', val > 0);
+                    }
+                });
+            }
+            recalculateInputTable();
+        }
+
+        function deleteSet(index) {
+            // +++ 追加: 削除ガードロジック +++
+            const targetId = savedData[index].id;
+            const isUsed = savedFormations.some(f => f.p1Id === targetId || f.p2Id === targetId);
+            if (isUsed) {
+                alert('この親は編成で使われとるから削除できへんで！先に編成管理タブで該当の編成を消してな。');
+                return;
+            }
+            // --- 変更箇所 END ---
+            if (confirm('ほんまに削除してええの？')) {
+                savedData.splice(index, 1);
+                saveToLocal();
+                updateSavedSetsDisplay();
+                updateDropdowns();
+                // +++ 追加: 編成画面の再描画 +++
+                updateFormationDisplay();
+                // --- 変更箇所 END ---
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('データ全部消えるけど、ほんまにええんか！？')) {
+                savedData = [];
+                // +++ 追加: 編成もクリア +++
+                savedFormations = [];
+                // --- 変更箇所 END ---
+                saveToLocal();
+                updateSavedSetsDisplay();
+                updateDropdowns();
+                // +++ 追加: 編成画面の再描画 +++
+                updateFormationDisplay();
+                // --- 変更箇所 END ---
+            }
+        }
+
+        // --- 6. ストレージ・JSON処理 ---
+        function saveToLocal() {
+            localStorage.setItem('umaSets', JSON.stringify(savedData));
+            // +++ 追加: 編成データの保存 +++
+            localStorage.setItem('umaFormations', JSON.stringify(savedFormations));
+            // --- 変更箇所 END ---
+        }
+
+        function exportJSON() {
+            // +++ 変更: 両方のデータをエクスポート +++
+            const exportData = { sets: savedData, formations: savedFormations };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+            // --- 変更箇所 END ---
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "uma_factors_backup.json");
+            dlAnchorElem.click();
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    // +++ 変更: 新旧フォーマットの対応 +++
+                    if (Array.isArray(imported)) {
+                        // 旧フォーマット
+                        savedData = imported;
+                        savedFormations = [];
+                    } else if (imported.sets) {
+                        // 新フォーマット
+                        savedData = imported.sets;
+                        savedFormations = imported.formations || [];
+                    } else {
+                        alert('データ形式がおかしいみたいやわ。');
+                        return;
+                    }
+
+                    // 互換性補完
+                    savedData.forEach(d => {
+                        if (!d.regDate) d.regDate = '';
+                        ['親1', '祖1', '祖2'].forEach(r => {
+                            if (!d.factors[r]) d.factors[r] = {};
+                            if (d.factors[r].dirt === undefined) d.factors[r].dirt = 0;
+                            if (d.factors[r].mile === undefined) d.factors[r].mile = 0;
+                        });
+                    });
+                    // --- 変更箇所 END ---
+
+                    saveToLocal();
+                    updateSavedSetsDisplay();
+                    updateDropdowns();
+                    // +++ 追加 +++
+                    updateFormationDisplay();
+                    // --- 変更箇所 END ---
+                    alert('読み込み完了や！');
+                } catch (err) {
+                    alert('JSONのパースに失敗したで。ファイル確認してみてな。');
+                }
+                // inputのクリア
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        // +++ 追加: 7. 編成シミュレート機能 +++
+        function saveFormation() {
+            const p1Idx = document.getElementById('formParent1').value;
+            const p2Idx = document.getElementById('formParent2').value;
+            const formName = document.getElementById('formName').value || '名無し編成';
+
+            if (p1Idx === "" || p2Idx === "") {
+                alert("親を2人選んでな！");
+                return;
+            }
+
+            const newForm = {
+                id: 'form_' + Date.now(),
+                name: formName,
+                p1Id: savedData[p1Idx].id,
+                p2Id: savedData[p2Idx].id
+            };
+
+            savedFormations.push(newForm);
+            saveToLocal();
+            updateFormationDisplay();
+            document.getElementById('formName').value = '';
+            alert('編成保存したで！');
+        }
+
+        function deleteFormation(index) {
+            if (confirm('この編成を削除してええの？')) {
+                savedFormations.splice(index, 1);
+                saveToLocal();
+                updateFormationDisplay();
+            }
+        }
+
+        // +++ 追加: 編成名の編集機能 +++
+        function editFormationName(index) {
+            const newName = prompt('新しい編成名を入力してな', savedFormations[index].name);
+            if (newName !== null && newName.trim() !== '') {
+                savedFormations[index].name = newName.trim();
+                saveToLocal();
+                updateFormationDisplay();
+            }
+        }
+        // --- 変更箇所 END ---
+
+        function toggleFormationDetail(btn, tbodyId) {
+            const rows = document.querySelectorAll(`#${tbodyId} .detail-row`);
+            const isHidden = rows[0].style.display === 'none';
+            rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+            btn.textContent = isHidden ? '詳細を隠す' : '詳細を表示';
+        }
+
+        // +++ 追加: 編成用スコア計算関数 +++
+        function calcFormationScore(data1, data2) {
+            let stars = 0;
+            let typesSet = new Set();
+            [data1, data2].forEach(data => {
+                ['親1', '祖1', '祖2'].forEach(r => {
+                    factors.forEach(f => {
+                        if (activeFilters.has(f.group)) {
+                            const val = data.factors[r][f.id] || 0;
+                            stars += val;
+                            if (val > 0) typesSet.add(f.id);
+                        }
+                    });
+                });
+            });
+            return { stars, types: typesSet.size };
+        }
+        // --- 変更箇所 END ---
+
+        function updateFormationDisplay() {
+            const container = document.getElementById('formationsContainer');
+            container.innerHTML = '';
+
+            // +++ 追加: ソート処理 +++
+            const sortKey = document.getElementById('formationSortSelect') ? document.getElementById('formationSortSelect').value : 'default';
+            let sortedIndices = savedFormations.map((f, i) => i);
+            if (sortKey !== 'default') {
+                sortedIndices.sort((a, b) => {
+                    const fA = savedFormations[a];
+                    const fB = savedFormations[b];
+                    const dA1 = savedData.find(d => d.id === fA.p1Id);
+                    const dA2 = savedData.find(d => d.id === fA.p2Id);
+                    const dB1 = savedData.find(d => d.id === fB.p1Id);
+                    const dB2 = savedData.find(d => d.id === fB.p2Id);
+                    if (!dA1 || !dA2 || !dB1 || !dB2) return 0;
+                    const sA = calcFormationScore(dA1, dA2);
+                    const sB = calcFormationScore(dB1, dB2);
+                    if (sortKey === 'stars_desc') return sB.stars - sA.stars;
+                    if (sortKey === 'stars_asc') return sA.stars - sB.stars;
+                    if (sortKey === 'types_desc') return sB.types - sA.types;
+                    if (sortKey === 'types_asc') return sA.types - sB.types;
+                    return 0;
+                });
+            }
+            // --- 変更箇所 END ---
+
+            sortedIndices.forEach(index => {
+                const form = savedFormations[index];
+                const data1 = savedData.find(d => d.id === form.p1Id);
+                const data2 = savedData.find(d => d.id === form.p2Id);
+
+                if (!data1 || !data2) return;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-container';
+                wrapper.style.marginBottom = '20px';
+                wrapper.style.border = '2px solid #2196F3';
+
+                const tbodyId = `form_tbody_${index}`;
+
+                let html = `
+                <div style="padding: 5px; background: #e3f2fd; display: flex; justify-content: space-between; align-items: center;">
+                    <strong>${form.name}</strong>
+                    <div>
+                        <button class="btn btn-info" style="padding: 2px 8px; margin-right: 5px;" onclick="editFormationName(${index})">名前変更</button>
+                        <button class="btn btn-info" style="padding: 2px 8px; margin-right: 5px;" onclick="toggleFormationDetail(this, '${tbodyId}')">詳細を表示</button>
+                        <button class="btn btn-danger" style="padding: 2px 8px;" onclick="deleteFormation(${index})">削除</button>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr>${buildTableHeader(false)}</tr></thead>
+                    <tbody id="${tbodyId}">
+                        <tr class="row-parent detail-row" style="display:none;">${buildRow('親1', '', false, data1, true)}</tr>
+                        <tr class="row-gp detail-row" style="display:none;">${buildRow('祖1', '', false, data1, true)}</tr>
+                        <tr class="row-gp detail-row" style="display:none;">${buildRow('祖2', '', false, data1, true)}</tr>
+                        <tr class="row-parent detail-row" style="display:none;">${buildRow('親2', '', false, data2, true)}</tr>
+                        <tr class="row-gp detail-row" style="display:none;">${buildRow('祖3', '', false, data2, true)}</tr>
+                        <tr class="row-gp detail-row" style="display:none;">${buildRow('祖4', '', false, data2, true)}</tr>
+                        <tr class="row-total">${buildTotalRow(false, data1, data2)}</tr>
+                    </tbody>
+                </table>
+            `;
+                wrapper.innerHTML = html;
+                container.appendChild(wrapper);
+            });
+        }
+        // --- 変更箇所 END ---
+
+
+
+        // 起動！
+        window.onload = init;
+    </script>
+
+</body>
+
+</html>
