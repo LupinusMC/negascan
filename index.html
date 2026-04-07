@@ -450,13 +450,21 @@
                 <button class="btn btn-primary" id="btnSaveParent" style="margin-left: 15px;"
                     onclick="saveCurrentSet()">➕ 親を登録</button>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="align-items: center; justify-content: flex-start; gap: 10px;">
                 <label>祖1を読込: <select id="loadGp1" onchange="loadGpData(1)">
                         <option value="">-- 新規手入力 --</option>
                     </select></label>
                 <label>祖2を読込: <select id="loadGp2" onchange="loadGpData(2)">
                         <option value="">-- 新規手入力 --</option>
                     </select></label>
+                <label style="margin-left:auto; font-size: 11px; background:#e0e0e0; padding:2px 5px; border-radius:4px;">📌候補並替: 
+                    <select id="parentDropdownSort" onchange="updateDropdowns()" style="font-size:11px; padding:1px;">
+                        <option value="default">登録順</option>
+                        <option value="stars_desc">星数計（多い順）</option>
+                        <option value="types_desc">因子種類数（多い順）</option>
+                        <option value="avg_desc">因子平均（高い順）</option>
+                    </select>
+                </label>
             </div>
 
             <div class="table-container">
@@ -478,6 +486,7 @@
                         <option value="default">登録順</option>
                         <option value="stars_desc">星数計（多い順）</option>
                         <option value="types_desc">因子種類数（多い順）</option>
+                        <option value="avg_desc">因子平均（高い順）</option>
                     </select>
                 </label>
             </span>
@@ -486,12 +495,23 @@
     </div>
     <div id="formationTab" class="tab-content">
         <h3>編成を新規登録</h3>
+        <div class="form-group" style="align-items: center; justify-content: flex-start; gap: 10px;">
+            <label>親1を選択: <select id="formParent1" onchange="updateFormationPreview()"></select></label>
+            <label>親2を選択: <select id="formParent2" onchange="updateFormationPreview()"></select></label>
+            <label style="margin-left:auto; font-size: 11px; background:#e0e0e0; padding:2px 5px; border-radius:4px;">📌候補並替: 
+                <select id="formationDropdownSort" onchange="updateDropdowns()" style="font-size:11px; padding:1px;">
+                    <option value="default">登録順</option>
+                    <option value="stars_desc">星数計（多い順）</option>
+                    <option value="types_desc">因子種類数（多い順）</option>
+                    <option value="avg_desc">因子平均（高い順）</option>
+                </select>
+            </label>
+        </div>
         <div class="form-group">
-            <label>親1を選択: <select id="formParent1"></select></label>
-            <label>親2を選択: <select id="formParent2"></select></label>
             <label>編成名: <input type="text" id="formName" placeholder=""></label>
             <button class="btn btn-primary" onclick="saveFormation()">➕ 編成を保存</button>
         </div>
+        <div id="formationPreviewArea" style="margin-bottom: 20px;"></div>
 
         <h3 style="display:inline-block;">編成一覧</h3>
         <span class="sort-control">
@@ -500,6 +520,7 @@
                     <option value="default">登録順</option>
                     <option value="stars_desc">星数計（多い順）</option>
                     <option value="types_desc">因子種類数（多い順）</option>
+                    <option value="avg_desc">因子平均（高い順）</option>
                 </select>
             </label>
         </span>
@@ -683,7 +704,7 @@
                 }
             });
 
-            html += `<th class="stat-header">星数計</th><th class="stat-header">因子種類数</th>`;
+            html += `<th class="stat-header">星数計</th><th class="stat-header">因子種類数</th><th class="stat-header">因子平均</th>`;
             return html;
         }
         // --- 変更箇所 END ---
@@ -762,8 +783,10 @@
             });
 
             // +++ 変更: 保存済みデータもフィルターに応じて動的に合計を出す +++
+            let dynamicAvg = dynamicTypes > 0 ? (dynamicStars / dynamicTypes).toFixed(2) : "0.00";
             html += `<td class="calc-stars ${isInput ? rowIdPrefix + '-stars' : ''}">${isInput ? '0' : dynamicStars}</td>`;
             html += `<td class="calc-types ${isInput ? rowIdPrefix + '-types' : ''}">${isInput ? '0' : dynamicTypes}</td>`;
+            html += `<td class="calc-avg ${isInput ? rowIdPrefix + '-avg' : ''}">${isInput ? '0.00' : dynamicAvg}</td>`;
             // --- 変更箇所 END ---
             return html;
         }
@@ -781,6 +804,7 @@
             // +++ 追加: フィルター動的計算・6人編成合計用変数 +++
             let dynamicAllStars = 0;
             let dynamicAllTypes = 0;
+            let dynamicAllNobeTypes = 0;
             let totalDirt = 0;
             let totalMile = 0;
             // --- 変更箇所 END ---
@@ -814,12 +838,14 @@
                             let v = rowData.factors[r][f.id] || 0;
                             val += v;
                             dynamicAllStars += v;
+                            if (v > 0) dynamicAllNobeTypes++;
                         });
                         if (rowData2) { // 6人編成の場合
                             ['親1', '祖1', '祖2'].forEach(r => {
                                 let v = rowData2.factors[r][f.id] || 0;
                                 val += v;
                                 dynamicAllStars += v;
+                                if (v > 0) dynamicAllNobeTypes++;
                             });
                         }
                         if (val > 0) dynamicAllTypes++;
@@ -830,8 +856,10 @@
             });
 
             // +++ 変更: 計算結果を動的に反映 +++
+            let dynamicAllAvg = dynamicAllNobeTypes > 0 ? (dynamicAllStars / dynamicAllNobeTypes).toFixed(2) : "0.00";
             html += `<td class="${isInput ? 'total-all-stars' : ''}">${isInput ? '0' : dynamicAllStars}</td>`;
             html += `<td class="${isInput ? 'total-all-types' : ''}">${isInput ? '0' : dynamicAllTypes}</td>`;
+            html += `<td class="${isInput ? 'total-all-avg' : ''}">${isInput ? '0.00' : dynamicAllAvg}</td>`;
             // --- 変更箇所 END ---
             return html;
         }
@@ -950,6 +978,7 @@
                 const prefix = ['input_p', 'input_g1', 'input_g2'][idx];
                 document.querySelector(`.${prefix}-stars`).textContent = rowStars;
                 document.querySelector(`.${prefix}-types`).textContent = rowTypes;
+                document.querySelector(`.${prefix}-avg`).textContent = rowTypes > 0 ? (rowStars / rowTypes).toFixed(2) : "0.00";
                 allStars += rowStars;
                 allTypes += rowTypes;
             });
@@ -964,6 +993,7 @@
 
             document.querySelector('.total-all-stars').textContent = allStars;
             document.querySelector('.total-all-types').textContent = allTypes;
+            document.querySelector('.total-all-avg').textContent = allTypes > 0 ? (allStars / allTypes).toFixed(2) : "0.00";
             // +++ 追加: ダートマイル合計表示 +++
             document.querySelector('.total-dirt').textContent = totalDirt;
             document.querySelector('.total-mile').textContent = totalMile;
@@ -1090,16 +1120,17 @@
         function calcDataScore(data) {
             let stars = 0;
             let typesSet = new Set();
+            let nobeTypes = 0;
             ['親1', '祖1', '祖2'].forEach(r => {
                 factors.forEach(f => {
                     if (activeFilters.has(f.group)) {
                         const val = data.factors[r][f.id] || 0;
                         stars += val;
-                        if (val > 0) typesSet.add(f.id);
+                        if (val > 0) { typesSet.add(f.id); nobeTypes++; }
                     }
                 });
             });
-            return { stars, types: typesSet.size };
+            return { stars, types: typesSet.size, avg: nobeTypes > 0 ? stars / nobeTypes : 0 };
         }
         // --- 変更箇所 END ---
 
@@ -1118,6 +1149,7 @@
                     if (sortKey === 'stars_asc') return sa.stars - sb.stars;
                     if (sortKey === 'types_desc') return sb.types - sa.types;
                     if (sortKey === 'types_asc') return sa.types - sb.types;
+                    if (sortKey === 'avg_desc') return sb.avg - sa.avg;
                     return 0;
                 });
             }
@@ -1156,27 +1188,62 @@
         function updateDropdowns() {
             const d1 = document.getElementById('loadGp1');
             const d2 = document.getElementById('loadGp2');
-            // +++ 追加: 編成用プルダウン +++
             const f1 = document.getElementById('formParent1');
             const f2 = document.getElementById('formParent2');
-            // --- 変更箇所 END ---
 
-            d1.innerHTML = '<option value="">-- 新規手入力 --</option>';
-            d2.innerHTML = '<option value="">-- 新規手入力 --</option>';
-            // +++ 追加: 編成用プルダウン初期化 +++
-            f1.innerHTML = '<option value="">-- 選択 --</option>';
-            f2.innerHTML = '<option value="">-- 選択 --</option>';
-            // --- 変更箇所 END ---
+            const v_d1 = d1 ? d1.value : '';
+            const v_d2 = d2 ? d2.value : '';
+            const v_f1 = f1 ? f1.value : '';
+            const v_f2 = f2 ? f2.value : '';
 
-            savedData.forEach((data, index) => {
-                const option = `<option value="${index}">${data.charName} (Tr: ${data.trainerName})</option>`;
-                d1.innerHTML += option;
-                d2.innerHTML += option;
-                // +++ 追加: 編成用オプション追加 +++
-                f1.innerHTML += option;
-                f2.innerHTML += option;
-                // --- 変更箇所 END ---
+            if (d1) d1.innerHTML = '<option value="">-- 新規手入力 --</option>';
+            if (d2) d2.innerHTML = '<option value="">-- 新規手入力 --</option>';
+            if (f1) f1.innerHTML = '<option value="">-- 選択 --</option>';
+            if (f2) f2.innerHTML = '<option value="">-- 選択 --</option>';
+
+            const gpSortKey = document.getElementById('parentDropdownSort') ? document.getElementById('parentDropdownSort').value : 'default';
+            const formSortKey = document.getElementById('formationDropdownSort') ? document.getElementById('formationDropdownSort').value : 'default';
+
+            let gpIndices = savedData.map((d, i) => i);
+            if (gpSortKey !== 'default') {
+                gpIndices.sort((a,b) => {
+                    const scA = calcDataScore(savedData[a]);
+                    const scB = calcDataScore(savedData[b]);
+                    if(gpSortKey === 'stars_desc') return scB.stars - scA.stars;
+                    if(gpSortKey === 'types_desc') return scB.types - scA.types;
+                    if(gpSortKey === 'avg_desc') return scB.avg - scA.avg;
+                    return 0;
+                });
+            }
+
+            let formIndices = savedData.map((d, i) => i);
+            if (formSortKey !== 'default') {
+                formIndices.sort((a,b) => {
+                    const scA = calcDataScore(savedData[a]);
+                    const scB = calcDataScore(savedData[b]);
+                    if(formSortKey === 'stars_desc') return scB.stars - scA.stars;
+                    if(formSortKey === 'types_desc') return scB.types - scA.types;
+                    if(formSortKey === 'avg_desc') return scB.avg - scA.avg;
+                    return 0;
+                });
+            }
+
+            gpIndices.forEach(idx => {
+                const option = `<option value="${idx}">${savedData[idx].charName} (Tr: ${savedData[idx].trainerName})</option>`;
+                if (d1) d1.innerHTML += option;
+                if (d2) d2.innerHTML += option;
             });
+
+            formIndices.forEach(idx => {
+                const option = `<option value="${idx}">${savedData[idx].charName} (Tr: ${savedData[idx].trainerName})</option>`;
+                if (f1) f1.innerHTML += option;
+                if (f2) f2.innerHTML += option;
+            });
+
+            if (d1) d1.value = v_d1;
+            if (d2) d2.value = v_d2;
+            if (f1) f1.value = v_f1;
+            if (f2) f2.value = v_f2;
         }
 
         // すでに登録してある「親1」のデータを「祖」として読み込む
@@ -1364,18 +1431,19 @@
         function calcFormationScore(data1, data2) {
             let stars = 0;
             let typesSet = new Set();
+            let nobeTypes = 0;
             [data1, data2].forEach(data => {
                 ['親1', '祖1', '祖2'].forEach(r => {
                     factors.forEach(f => {
                         if (activeFilters.has(f.group)) {
                             const val = data.factors[r][f.id] || 0;
                             stars += val;
-                            if (val > 0) typesSet.add(f.id);
+                            if (val > 0) { typesSet.add(f.id); nobeTypes++; }
                         }
                     });
                 });
             });
-            return { stars, types: typesSet.size };
+            return { stars, types: typesSet.size, avg: nobeTypes > 0 ? stars / nobeTypes : 0 };
         }
         // --- 変更箇所 END ---
 
@@ -1401,6 +1469,7 @@
                     if (sortKey === 'stars_asc') return sA.stars - sB.stars;
                     if (sortKey === 'types_desc') return sB.types - sA.types;
                     if (sortKey === 'types_asc') return sA.types - sB.types;
+                    if (sortKey === 'avg_desc') return sB.avg - sA.avg;
                     return 0;
                 });
             }
@@ -1448,7 +1517,42 @@
         }
         // --- 変更箇所 END ---
 
+        // +++ 追加: 事前シミュレーションプレビュー機能 +++
+        function updateFormationPreview() {
+            const p1Val = document.getElementById('formParent1').value;
+            const p2Val = document.getElementById('formParent2').value;
+            const previewArea = document.getElementById('formationPreviewArea');
 
+            if (p1Val === "" || p2Val === "") {
+                previewArea.innerHTML = '';
+                return;
+            }
+
+            const data1 = savedData[p1Val];
+            const data2 = savedData[p2Val];
+
+            if (!data1 || !data2) return;
+
+            const html = `
+                <div style="font-size: 13px; margin-bottom: 5px; color: #4CAF50; font-weight: bold;">💬 事前シミュレーション</div>
+                <div class="table-container" style="border: 2px dashed #4CAF50;">
+                    <table>
+                        <thead><tr>${buildTableHeader(false)}</tr></thead>
+                        <tbody>
+                            <tr class="row-parent">${buildRow('親1', '', false, data1, true)}</tr>
+                            <tr class="row-gp">${buildRow('祖1', '', false, data1, true)}</tr>
+                            <tr class="row-gp">${buildRow('祖2', '', false, data1, true)}</tr>
+                            <tr class="row-parent">${buildRow('親2', '', false, data2, true)}</tr>
+                            <tr class="row-gp">${buildRow('祖3', '', false, data2, true)}</tr>
+                            <tr class="row-gp">${buildRow('祖4', '', false, data2, true)}</tr>
+                            <tr class="row-total">${buildTotalRow(false, data1, data2)}</tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            previewArea.innerHTML = html;
+        }
+        // --- 追加箇所 END ---
 
         // 起動！
         window.onload = init;
