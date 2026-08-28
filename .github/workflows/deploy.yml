@@ -1,0 +1,62 @@
+name: Deploy latest version to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "negascan_ver.*.html"
+      - "negascan_v*.html"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick latest versioned file
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          candidates=(negascan_ver.*.html)
+          if [ ${#candidates[@]} -eq 0 ]; then
+            candidates=(negascan_v*.html)
+          fi
+          if [ ${#candidates[@]} -eq 0 ]; then
+            echo "No negascan_ver.*.html / negascan_v*.html files found" >&2
+            exit 1
+          fi
+          latest=$(printf '%s\n' "${candidates[@]}" | sort -V | tail -n1)
+          echo "Latest version file: $latest"
+
+          mkdir -p _site
+          cp negascan*.html _site/ 2>/dev/null || true
+          cp "$latest" _site/index.html
+          echo "Published $latest as index.html"
+          ls -la _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
