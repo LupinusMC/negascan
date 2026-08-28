@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ウマ娘 因子集計ツール</title>
+    <style>
+        body {
+            font-family: 'Meiryo', sans-serif;
+            background-color: #f4f5f7;
+            padding: 20px;
+            color: #333;
+        }
+        h1 { font-size: 24px; border-bottom: 2px solid #555; padding-bottom: 5px; }
+        
+        /* コントロールパネル */
+        .control-panel {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 8px 16px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-info { background: #2196F3; color: white; }
+        
+        /* フィルター */
+        .filter-group {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #ccc;
+        }
+        .filter-label { margin-right: 15px; font-size: 14px; cursor: pointer; }
+
+        /* エクセル風テーブル */
+        .table-container {
+            overflow-x: auto;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            border-collapse: collapse;
+            white-space: nowrap;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #aaa;
+            padding: 4px 8px;
+            text-align: center;
+            font-size: 13px;
+        }
+        th { background-color: #f0f0f0; font-weight: normal; }
+        
+        /* 因子ヘッダーの縦書き風＆色分け */
+        .factor-header {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            height: 120px;
+            min-width: 25px;
+            vertical-align: bottom;
+            padding-bottom: 5px;
+        }
+        .bg-tenka { background-color: #b3e5fc; } /* 水色 */
+        .bg-shinzui { background-color: #c8e6c9; } /* 緑 */
+        .bg-kago { background-color: #ffe0b2; } /* オレンジ */
+        .bg-others { background-color: #e1bee7; } /* 紫 */
+        .bg-debuff { background-color: #fff9c4; } /* 黄色 */
+
+        /* 入力セル */
+        .cell-input {
+            width: 30px;
+            text-align: center;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+        }
+        .cell-input:focus { outline: 2px solid #2196F3; background: #e3f2fd; }
+        .has-factor { background-color: #ffcdd2; font-weight: bold; color: #d32f2f; } /* ピンク色 */
+        
+        /* 行の背景 */
+        .row-parent { background-color: #fafafa; }
+        .row-gp { background-color: #ffffff; }
+        .row-total { background-color: #f5f5f5; font-weight: bold; }
+
+        /* フォーム系 */
+        .form-group { margin-bottom: 10px; }
+        .form-group input, .form-group select { padding: 4px; }
+    </style>
+</head>
+<body>
+
+    <h1>ウマ娘 因子集計ツール（シナリオ・デバフ特化）</h1>
+
+    <div class="control-panel">
+        <div>
+            <button class="btn btn-info" onclick="exportJSON()">💾 JSON保存</button>
+            <input type="file" id="importFile" style="display:none" onchange="importJSON(event)">
+            <button class="btn btn-info" onclick="document.getElementById('importFile').click()">📂 JSON読込</button>
+            <button class="btn btn-danger" onclick="clearAllData()">🗑 全データ削除</button>
+        </div>
+        
+        <div class="filter-group" id="filterContainer">
+            <strong>表示フィルター：</strong>
+            </div>
+    </div>
+
+    <div class="control-panel" id="registrationArea">
+        <h3>新しい因子セットを登録</h3>
+        <div class="form-group">
+            <label>キャラ名: <input type="text" id="inputCharName" placeholder="ナリタブライアン"></label>
+            <label>トレーナー名: <input type="text" id="inputTrainerName" placeholder="ラダ"></label>
+            <button class="btn btn-primary" style="margin-left: 15px;" onclick="saveCurrentSet()">➕ このセットを保存</button>
+        </div>
+        <div class="form-group">
+            <label>祖1を読込: <select id="loadGp1" onchange="loadGpData(1)"><option value="">-- 新規手入力 --</option></select></label>
+            <label>祖2を読込: <select id="loadGp2" onchange="loadGpData(2)"><option value="">-- 新規手入力 --</option></select></label>
+        </div>
+
+        <div class="table-container">
+            <table id="inputTable">
+                <thead><tr id="inputTableHeader"></tr></thead>
+                <tbody id="inputTableBody">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="savedDataArea">
+        <h3>保存済みセット一覧</h3>
+        <div id="savedTablesContainer"></div>
+    </div>
+
+<script>
+    // --- 1. データ定義 ---
+    // 因子の種類とグループを定義
+    const factors = [
+        // シナリオ因子
+        { id: 'tenka_soku', name: '点火・速', group: '点火', class: 'bg-tenka' },
+        { id: 'tenka_tai', name: '点火・体', group: '点火', class: 'bg-tenka' },
+        { id: 'tenka_ryoku', name: '点火・力', group: '点火', class: 'bg-tenka' },
+        { id: 'tenka_kon', name: '点火・根', group: '点火', class: 'bg-tenka' },
+        { id: 'tenka_ken', name: '点火・賢', group: '点火', class: 'bg-tenka' },
+        { id: 'kira', name: '綺羅星', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'yume', name: '夢の途中', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'shin_soku', name: '真髄・速', group: '真髄', class: 'bg-shinzui' },
+        { id: 'shin_tai', name: '真髄・体', group: '真髄', class: 'bg-shinzui' },
+        { id: 'shin_ryoku', name: '真髄・力', group: '真髄', class: 'bg-shinzui' },
+        { id: 'shin_kon', name: '真髄・根', group: '真髄', class: 'bg-shinzui' },
+        { id: 'shin_ken', name: '真髄・賢', group: '真髄', class: 'bg-shinzui' },
+        { id: 'shin_shin', name: '真髄・心', group: '真髄', class: 'bg-shinzui' },
+        { id: 'mae', name: '前だけ見据えて', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'kago_yo', name: '加護・陽', group: '加護', class: 'bg-kago' },
+        { id: 'kago_umi', name: '加護・海', group: '加護', class: 'bg-kago' },
+        { id: 'kago_chi', name: '加護・地', group: '加護', class: 'bg-kago' },
+        { id: 'omoi', name: '想いを背負って', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'burning', name: 'バーニングソウル', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'sukoyaka', name: 'いつまでも健やかに', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'saisei', name: '夢の再生方法', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'jidai', name: '時代を変える者', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'aruga', name: 'あるがままに', group: 'シナリオ他', class: 'bg-others' },
+        { id: 'yasunde', name: '本気で休んで', group: 'シナリオ他', class: 'bg-others' },
+        // デバフ
+        { id: 'tame_nige', name: '逃げためらい', group: 'ためらい', class: 'bg-debuff' },
+        { id: 'tame_sen', name: '先行ためらい', group: 'ためらい', class: 'bg-debuff' },
+        { id: 'tame_sashi', name: '差しためらい', group: 'ためらい', class: 'bg-debuff' },
+        { id: 'tame_oi', name: '追込ためらい', group: 'ためらい', class: 'bg-debuff' },
+        { id: 'ken_nige', name: '逃げけん制', group: 'けん制', class: 'bg-debuff' },
+        { id: 'ken_sen', name: '先行けん制', group: 'けん制', class: 'bg-debuff' },
+        { id: 'ken_sashi', name: '差しけん制', group: 'けん制', class: 'bg-debuff' },
+        { id: 'ken_oi', name: '追込けん制', group: 'けん制', class: 'bg-debuff' },
+        { id: 'ase_nige', name: '逃げ焦り', group: '焦り', class: 'bg-debuff' },
+        { id: 'ase_sen', name: '先行焦り', group: '焦り', class: 'bg-debuff' },
+        { id: 'ase_sashi', name: '差し焦り', group: '焦り', class: 'bg-debuff' },
+        { id: 'ase_oi', name: '追込焦り', group: '焦り', class: 'bg-debuff' },
+        { id: 'kake_nige', name: '逃げ駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+        { id: 'kake_sen', name: '先行駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+        { id: 'kake_sashi', name: '差し駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true },
+        { id: 'kake_oi', name: '追込駆け引き', group: '駆け引き', class: 'bg-debuff', defaultHidden: true }
+    ];
+
+    let savedData = JSON.parse(localStorage.getItem('umaSets')) || [];
+    let activeFilters = new Set(); // 表示するグループ名のセット
+
+    // --- 2. 初期化とUI構築 ---
+    function init() {
+        setupFilters();
+        buildInputTable();
+        updateSavedSetsDisplay();
+        updateDropdowns();
+    }
+
+    function setupFilters() {
+        const groups = [...new Set(factors.map(f => f.group))];
+        const container = document.getElementById('filterContainer');
+        container.innerHTML = '<strong>表示フィルター：</strong>';
+        
+        groups.forEach(group => {
+            // 駆け引きはデフォルトでチェック外す
+            const isHidden = factors.find(f => f.group === group).defaultHidden;
+            if (!isHidden) activeFilters.add(group);
+
+            const label = document.createElement('label');
+            label.className = 'filter-label';
+            label.innerHTML = `<input type="checkbox" value="${group}" ${!isHidden ? 'checked' : ''} onchange="toggleFilter(this)"> ${group}`;
+            container.appendChild(label);
+        });
+    }
+
+    function toggleFilter(checkbox) {
+        if (checkbox.checked) {
+            activeFilters.add(checkbox.value);
+        } else {
+            activeFilters.delete(checkbox.value);
+        }
+        buildInputTable();
+        updateSavedSetsDisplay();
+    }
+
+    // --- 3. テーブル生成ロジック ---
+    function buildTableHeader() {
+        let html = `<th>キャラ</th><th>トレーナー</th><th>関係</th>`;
+        factors.forEach(f => {
+            if (activeFilters.has(f.group)) {
+                html += `<th class="factor-header ${f.class}">${f.name}</th>`;
+            }
+        });
+        html += `<th>星数計</th><th>因子種類数</th>`;
+        return html;
+    }
+
+    function buildRow(roleName, rowIdPrefix, isInput = true, rowData = null) {
+        let html = ``;
+        if (roleName === '親1') {
+            html += `<td rowspan="3">${isInput ? '<input type="text" id="'+rowIdPrefix+'_char" style="width:80px">' : rowData.charName}</td>`;
+            html += `<td rowspan="3">${isInput ? '<input type="text" id="'+rowIdPrefix+'_trainer" style="width:80px">' : rowData.trainerName}</td>`;
+        }
+        html += `<td>${roleName}</td>`;
+
+        factors.forEach(f => {
+            if (activeFilters.has(f.group)) {
+                let val = '';
+                let cellClass = '';
+                if (!isInput && rowData && rowData.factors) {
+                    val = rowData.factors[roleName][f.id] || 0;
+                    if (val > 0) cellClass = 'has-factor';
+                }
+                
+                if (isInput) {
+                    html += `<td><input type="text" maxlength="1" class="cell-input input-factor" data-role="${roleName}" data-factor="${f.id}" oninput="handleInput(event)" onkeydown="handleKeydown(event)"></td>`;
+                } else {
+                    html += `<td class="${cellClass}">${val == 0 ? '' : val}</td>`;
+                }
+            }
+        });
+        
+        // 計測用のダミー列（入力時はJSでリアルタイム計算、表示時は保存データを表示）
+        html += `<td class="calc-stars ${isInput ? rowIdPrefix+'-stars' : ''}">${isInput ? '0' : rowData.totals[roleName].stars}</td>`;
+        html += `<td class="calc-types ${isInput ? rowIdPrefix+'-types' : ''}">${isInput ? '0' : rowData.totals[roleName].types}</td>`;
+        return html;
+    }
+
+    function buildTotalRow(isInput = true, rowData = null) {
+        let html = `<td colspan="3" style="text-align:right;">計</td>`;
+        factors.forEach(f => {
+            if (activeFilters.has(f.group)) {
+                let val = 0;
+                if (!isInput && rowData) val = rowData.totals.cols[f.id] || 0;
+                html += `<td class="calc-col-total ${isInput ? 'col-total-'+f.id : ''} ${val > 0 && !isInput ? 'has-factor' : ''}">${isInput ? '0' : (val == 0 ? '' : val)}</td>`;
+            }
+        });
+        html += `<td class="${isInput ? 'total-all-stars' : ''}">${isInput ? '0' : rowData.totals.allStars}</td>`;
+        html += `<td class="${isInput ? 'total-all-types' : ''}">${isInput ? '0' : rowData.totals.allTypes}</td>`;
+        return html;
+    }
+
+    function buildInputTable() {
+        document.getElementById('inputTableHeader').innerHTML = buildTableHeader();
+        const tbody = document.getElementById('inputTableBody');
+        tbody.innerHTML = `
+            <tr class="row-parent">${buildRow('親1', 'input_p')}</tr>
+            <tr class="row-gp">${buildRow('祖1', 'input_g1')}</tr>
+            <tr class="row-gp">${buildRow('祖2', 'input_g2')}</tr>
+            <tr class="row-total">${buildTotalRow()}</tr>
+        `;
+    }
+
+    // --- 4. 入力補助（爆速入力）とリアルタイム計算 ---
+    function handleInput(e) {
+        const val = e.target.value;
+        // 0-3以外は消す
+        if (!/^[0-3]$/.test(val)) {
+            e.target.value = '';
+        } else {
+            // 色付け
+            e.target.classList.toggle('has-factor', val > 0);
+            
+            // 次の入力マスへ自動移動
+            const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor'));
+            const idx = inputs.indexOf(e.target);
+            if (idx > -1 && idx < inputs.length - 1) {
+                inputs[idx + 1].focus();
+                inputs[idx + 1].select();
+            }
+        }
+        recalculateInputTable();
+    }
+
+    function handleKeydown(e) {
+        // Backspaceで空欄なら一つ前に戻る
+        if (e.key === 'Backspace' && e.target.value === '') {
+            const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor'));
+            const idx = inputs.indexOf(e.target);
+            if (idx > 0) {
+                inputs[idx - 1].focus();
+                inputs[idx - 1].select();
+                e.preventDefault();
+            }
+        }
+    }
+
+    function recalculateInputTable() {
+        const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor'));
+        let data = { '親1': {}, '祖1': {}, '祖2': {} };
+        
+        inputs.forEach(input => {
+            const role = input.getAttribute('data-role');
+            const factorId = input.getAttribute('data-factor');
+            data[role][factorId] = parseInt(input.value) || 0;
+            // 表示の更新
+            input.classList.toggle('has-factor', input.value > 0);
+        });
+
+        let allStars = 0;
+        let allTypes = 0;
+        let colTotals = {};
+
+        ['親1', '祖1', '祖2'].forEach((role, idx) => {
+            let rowStars = 0;
+            let rowTypes = 0;
+            factors.forEach(f => {
+                if (activeFilters.has(f.group)) {
+                    const val = data[role][f.id] || 0;
+                    rowStars += val;
+                    if (val > 0) rowTypes++;
+                    colTotals[f.id] = (colTotals[f.id] || 0) + val;
+                }
+            });
+            
+            const prefix = ['input_p', 'input_g1', 'input_g2'][idx];
+            document.querySelector(`.${prefix}-stars`).textContent = rowStars;
+            document.querySelector(`.${prefix}-types`).textContent = rowTypes;
+            allStars += rowStars;
+            allTypes += rowTypes;
+        });
+
+        factors.forEach(f => {
+            if (activeFilters.has(f.group)) {
+                const colCell = document.querySelector(`.col-total-${f.id}`);
+                colCell.textContent = colTotals[f.id] > 0 ? colTotals[f.id] : '';
+                colCell.classList.toggle('has-factor', colTotals[f.id] > 0);
+            }
+        });
+
+        document.querySelector('.total-all-stars').textContent = allStars;
+        document.querySelector('.total-all-types').textContent = allTypes;
+    }
+
+    // --- 5. データの保存・読込・表示 ---
+    function saveCurrentSet() {
+        const charName = document.getElementById('input_p_char').value || '名無し';
+        const trainerName = document.getElementById('input_p_trainer').value || '名無し';
+        
+        let newSet = {
+            id: 'id_' + Date.now(),
+            charName: charName,
+            trainerName: trainerName,
+            factors: { '親1': {}, '祖1': {}, '祖2': {} },
+            totals: {
+                '親1': { stars: 0, types: 0 },
+                '祖1': { stars: 0, types: 0 },
+                '祖2': { stars: 0, types: 0 },
+                cols: {},
+                allStars: 0,
+                allTypes: 0
+            }
+        };
+
+        const inputs = Array.from(document.querySelectorAll('#inputTableBody .input-factor'));
+        inputs.forEach(input => {
+            const role = input.getAttribute('data-role');
+            const factorId = input.getAttribute('data-factor');
+            const val = parseInt(input.value) || 0;
+            // フィルター外のデータも裏で保持するかどうか（今回はシンプルに表示中のものだけを保存、または全因子のinputを裏に持つか。簡略化のため全マスをループ）
+        });
+        
+        // フィルター外も含めて全因子の状態を取得するためDOMからではなくデータ構造を作るべきだが、
+        // 簡略化のため「入力フォームにある値（＝フィルターで表示中の値）」のみ保存する。
+        // 本当は表示非表示に関わらず裏で保持する方が綺麗だが、今回はツールとしての速さを優先。
+        
+        factors.forEach(f => {
+             ['親1', '祖1', '祖2'].forEach(role => {
+                 const el = document.querySelector(`.input-factor[data-role="${role}"][data-factor="${f.id}"]`);
+                 const val = el ? (parseInt(el.value) || 0) : 0;
+                 newSet.factors[role][f.id] = val;
+                 
+                 newSet.totals[role].stars += val;
+                 if(val > 0) newSet.totals[role].types++;
+                 newSet.totals.cols[f.id] = (newSet.totals.cols[f.id] || 0) + val;
+                 newSet.totals.allStars += val;
+             });
+        });
+        
+        ['親1', '祖1', '祖2'].forEach(role => {
+            let t = 0;
+            factors.forEach(f => { if(newSet.factors[role][f.id] > 0) t++; });
+            newSet.totals[role].types = t;
+        });
+
+        savedData.push(newSet);
+        saveToLocal();
+        updateSavedSetsDisplay();
+        updateDropdowns();
+        
+        // 入力クリア
+        inputs.forEach(input => { input.value = ''; input.classList.remove('has-factor'); });
+        recalculateInputTable();
+        alert('保存したで！');
+    }
+
+    function updateSavedSetsDisplay() {
+        const container = document.getElementById('savedTablesContainer');
+        container.innerHTML = '';
+        
+        savedData.forEach((data, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-container';
+            wrapper.style.marginBottom = '20px';
+            wrapper.style.border = '2px solid #ccc';
+            
+            let html = `
+                <div style="padding: 5px; background: #e0e0e0; display: flex; justify-content: space-between;">
+                    <strong>登録 #${index + 1} : ${data.charName} (Tr: ${data.trainerName})</strong>
+                    <button class="btn btn-danger" style="padding: 2px 8px;" onclick="deleteSet(${index})">削除</button>
+                </div>
+                <table>
+                    <thead><tr>${buildTableHeader()}</tr></thead>
+                    <tbody>
+                        <tr class="row-parent">${buildRow('親1', '', false, data)}</tr>
+                        <tr class="row-gp">${buildRow('祖1', '', false, data)}</tr>
+                        <tr class="row-gp">${buildRow('祖2', '', false, data)}</tr>
+                        <tr class="row-total">${buildTotalRow(false, data)}</tr>
+                    </tbody>
+                </table>
+            `;
+            wrapper.innerHTML = html;
+            container.appendChild(wrapper);
+        });
+    }
+
+    function updateDropdowns() {
+        const d1 = document.getElementById('loadGp1');
+        const d2 = document.getElementById('loadGp2');
+        d1.innerHTML = '<option value="">-- 新規手入力 --</option>';
+        d2.innerHTML = '<option value="">-- 新規手入力 --</option>';
+        
+        savedData.forEach((data, index) => {
+            const option = `<option value="${index}">${data.charName} (Tr: ${data.trainerName})</option>`;
+            d1.innerHTML += option;
+            d2.innerHTML += option;
+        });
+    }
+
+    // すでに登録してある「親1」のデータを「祖」として読み込む
+    function loadGpData(gpNum) {
+        const select = document.getElementById(`loadGp${gpNum}`);
+        const idx = select.value;
+        const roleStr = `祖${gpNum}`;
+        
+        const inputs = Array.from(document.querySelectorAll(`.input-factor[data-role="${roleStr}"]`));
+        
+        if (idx === "") {
+            // クリア
+            inputs.forEach(input => { input.value = ''; input.classList.remove('has-factor'); });
+        } else {
+            // 読み込み（登録データの「親1」の因子をコピー）
+            const targetData = savedData[idx].factors['親1'];
+            inputs.forEach(input => {
+                const factorId = input.getAttribute('data-factor');
+                const val = targetData[factorId] || 0;
+                input.value = val > 0 ? val : '';
+                input.classList.toggle('has-factor', val > 0);
+            });
+        }
+        recalculateInputTable();
+    }
+
+    function deleteSet(index) {
+        if(confirm('ほんまに削除してええの？')) {
+            savedData.splice(index, 1);
+            saveToLocal();
+            updateSavedSetsDisplay();
+            updateDropdowns();
+        }
+    }
+
+    function clearAllData() {
+        if(confirm('データ全部消えるけど、ほんまにええんか！？')) {
+            savedData = [];
+            saveToLocal();
+            updateSavedSetsDisplay();
+            updateDropdowns();
+        }
+    }
+
+    // --- 6. ストレージ・JSON処理 ---
+    function saveToLocal() {
+        localStorage.setItem('umaSets', JSON.stringify(savedData));
+    }
+
+    function exportJSON() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedData, null, 2));
+        const dlAnchorElem = document.createElement('a');
+        dlAnchorElem.setAttribute("href", dataStr);
+        dlAnchorElem.setAttribute("download", "uma_factors_backup.json");
+        dlAnchorElem.click();
+    }
+
+    function importJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (Array.isArray(imported)) {
+                    savedData = imported;
+                    saveToLocal();
+                    updateSavedSetsDisplay();
+                    updateDropdowns();
+                    alert('読み込み完了や！');
+                } else {
+                    alert('データ形式がおかしいみたいやわ。');
+                }
+            } catch (err) {
+                alert('JSONのパースに失敗したで。ファイル確認してみてな。');
+            }
+            // inputのクリア
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    // 起動！
+    window.onload = init;
+</script>
+
+</body>
+</html>
